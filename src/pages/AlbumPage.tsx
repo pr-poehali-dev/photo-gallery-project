@@ -1,13 +1,11 @@
 
-import { useState, useRef, ChangeEvent } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useRef, ChangeEvent, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { 
   ChevronLeft, 
   Upload, 
-  Grid3X3, 
-  Move, 
   Image as ImageIcon 
 } from "lucide-react";
 import PhotoViewer from "@/components/PhotoGallery/PhotoViewer";
@@ -24,15 +22,23 @@ interface Photo {
   height: number;
 }
 
+interface Album {
+  id: string;
+  title: string;
+  photoCount: number;
+  coverUrl?: string;
+}
+
 const AlbumPage = () => {
   const { albumId } = useParams<{ albumId: string }>();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [albumTitle, setAlbumTitle] = useState('Загрузка...');
+  const [albumTitle, setAlbumTitle] = useState('');
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [photoToDelete, setPhotoToDelete] = useState<string | null>(null);
-  const [previewSize, setPreviewSize] = useState(150);
+  const [previewSize, setPreviewSize] = useState(200);
   const [gap, setGap] = useState(8);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
@@ -40,24 +46,57 @@ const AlbumPage = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [layoutMode, setLayoutMode] = useState<'grid' | 'masonry'>('masonry');
 
-  // Имитация загрузки данных альбома
-  useState(() => {
-    // В реальном приложении здесь был бы запрос к API
-    setTimeout(() => {
-      setAlbumTitle(albumId === '1' ? 'Природа' : albumId === '2' ? 'Путешествия' : 'Семья');
+  // Загрузка данных альбома
+  useEffect(() => {
+    if (!albumId) return;
+    
+    // Загрузка данных альбома из localStorage
+    const storedAlbums = localStorage.getItem('photoAlbums');
+    if (storedAlbums) {
+      const albums: Album[] = JSON.parse(storedAlbums);
+      const album = albums.find(a => a.id === albumId);
       
-      // Имитация загрузки фотографий
-      const demoPhotos: Photo[] = [
-        { id: '1', url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb', title: 'Горы и озеро', albumId: albumId || '', width: 1600, height: 900 },
-        { id: '2', url: 'https://images.unsplash.com/photo-1511884642898-4c92249e20b6', title: 'Водопад', albumId: albumId || '', width: 1067, height: 1600 },
-        { id: '3', url: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e', title: 'Закат на озере', albumId: albumId || '', width: 1600, height: 1068 },
-        { id: '4', url: 'https://images.unsplash.com/photo-1546514355-7fdc90ccbd03', title: 'Горный пейзаж', albumId: albumId || '', width: 1067, height: 1600 },
-        { id: '5', url: 'https://images.unsplash.com/photo-1533038590840-1cde6e668a91', title: 'Лесная тропа', albumId: albumId || '', width: 1600, height: 1068 },
-      ];
+      if (album) {
+        setAlbumTitle(album.title);
+      } else {
+        // Если альбом не найден, перенаправляем на главную
+        navigate('/');
+        return;
+      }
+    }
+    
+    // Загрузка фотографий альбома
+    const storedPhotos = localStorage.getItem(`albumPhotos_${albumId}`);
+    if (storedPhotos) {
+      setPhotos(JSON.parse(storedPhotos));
+    } else {
+      localStorage.setItem(`albumPhotos_${albumId}`, JSON.stringify([]));
+    }
+  }, [albumId, navigate]);
+
+  // Сохранение фотографий при изменении
+  useEffect(() => {
+    if (albumId && photos.length >= 0) {
+      localStorage.setItem(`albumPhotos_${albumId}`, JSON.stringify(photos));
       
-      setPhotos(demoPhotos);
-    }, 500);
-  }, [albumId]);
+      // Обновление количества фото и обложки в альбоме
+      const storedAlbums = localStorage.getItem('photoAlbums');
+      if (storedAlbums) {
+        const albums: Album[] = JSON.parse(storedAlbums);
+        const updatedAlbums = albums.map(album => {
+          if (album.id === albumId) {
+            return {
+              ...album,
+              photoCount: photos.length,
+              coverUrl: photos.length > 0 ? photos[0].url : undefined
+            };
+          }
+          return album;
+        });
+        localStorage.setItem('photoAlbums', JSON.stringify(updatedAlbums));
+      }
+    }
+  }, [photos, albumId]);
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -69,25 +108,40 @@ const AlbumPage = () => {
   const handleFileUpload = (files: File[], titles: string[]) => {
     setIsUploading(true);
     
-    // Имитация загрузки файлов
-    setTimeout(() => {
-      const newPhotos = files.map((file, index) => {
-        const url = URL.createObjectURL(file);
-        return {
-          id: Date.now() + index.toString(),
-          url,
-          title: titles[index] || file.name,
-          albumId: albumId || '',
-          width: 1200,
-          height: 800
+    // Создаем массив для хранения новых фото
+    const newPhotos: Photo[] = [];
+    let loadedCount = 0;
+    
+    // Для каждого файла создаем изображение и получаем его размеры
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const photo: Photo = {
+            id: Date.now() + index.toString(),
+            url: img.src,
+            title: titles[index] || file.name,
+            albumId: albumId || '',
+            width: img.width,
+            height: img.height
+          };
+          
+          newPhotos.push(photo);
+          loadedCount++;
+          
+          // Когда все фото загружены
+          if (loadedCount === files.length) {
+            setPhotos(prev => [...prev, ...newPhotos]);
+            setIsUploading(false);
+            setUploaderOpen(false);
+            setSelectedFiles([]);
+          }
         };
-      });
-      
-      setPhotos(prev => [...prev, ...newPhotos]);
-      setIsUploading(false);
-      setUploaderOpen(false);
-      setSelectedFiles([]);
-    }, 2000);
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const openPhotoViewer = (index: number) => {
@@ -190,22 +244,26 @@ const AlbumPage = () => {
               {photos.map((photo, index) => (
                 <div 
                   key={photo.id} 
-                  className={`group relative overflow-hidden ${layoutMode === 'grid' ? '' : 'break-inside-avoid'}`}
+                  className={`group relative ${layoutMode === 'grid' ? '' : 'break-inside-avoid'}`}
                   style={{ 
                     margin: layoutMode === 'grid' ? `${gap/2}px` : `0 0 ${gap}px 0`,
                     width: layoutMode === 'grid' ? `${previewSize}px` : 'auto',
+                    height: layoutMode === 'grid' ? `${previewSize}px` : 'auto',
                     display: layoutMode === 'grid' ? 'inline-block' : 'block'
                   }}
                   onClick={() => openPhotoViewer(index)}
                 >
-                  <div className="relative">
+                  <div className="relative w-full h-full overflow-hidden">
                     <img 
                       src={photo.url} 
                       alt={photo.title}
-                      className={`w-full h-auto object-cover cursor-pointer transition-transform hover:scale-105`}
-                      style={{ width: layoutMode === 'grid' ? `${previewSize}px` : '100%' }}
+                      className={`w-full h-full object-cover cursor-pointer transition-transform hover:scale-105`}
+                      style={{ 
+                        width: '100%',
+                        height: layoutMode === 'grid' ? '100%' : 'auto'
+                      }}
                     />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-sm">
+                    <div className="absolute bottom-0 left-0 right-0 text-white p-2 text-sm text-shadow">
                       {photo.title}
                     </div>
                   </div>
@@ -226,14 +284,16 @@ const AlbumPage = () => {
         </div>
       </div>
 
-      <PhotoViewer 
-        photos={photos}
-        currentIndex={currentPhotoIndex}
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
-        onDelete={(photoId) => setPhotoToDelete(photoId)}
-        onMove={movePhoto}
-      />
+      {photos.length > 0 && (
+        <PhotoViewer 
+          photos={photos}
+          currentIndex={currentPhotoIndex}
+          open={viewerOpen}
+          onOpenChange={setViewerOpen}
+          onDelete={(photoId) => setPhotoToDelete(photoId)}
+          onMove={movePhoto}
+        />
+      )}
 
       <PhotoUploader 
         files={selectedFiles}

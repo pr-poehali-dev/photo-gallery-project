@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, X, Trash2, FolderSymlink } from "lucide-react";
@@ -23,15 +23,25 @@ interface PhotoViewerProps {
 const PhotoViewer = ({ photos, currentIndex, open, onOpenChange, onDelete, onMove }: PhotoViewerProps) => {
   const [index, setIndex] = useState(currentIndex);
   
+  // Обновление индекса при изменении currentIndex
+  useEffect(() => {
+    setIndex(currentIndex);
+  }, [currentIndex]);
+  
   const navigateToNext = () => {
-    setIndex((prevIndex) => (prevIndex + 1) % photos.length);
+    if (photos.length > 0) {
+      setIndex((prevIndex) => (prevIndex + 1) % photos.length);
+    }
   };
 
   const navigateToPrevious = () => {
-    setIndex((prevIndex) => (prevIndex - 1 + photos.length) % photos.length);
+    if (photos.length > 0) {
+      setIndex((prevIndex) => (prevIndex - 1 + photos.length) % photos.length);
+    }
   };
 
-  const currentPhoto = photos[index];
+  // Защита от ошибок при доступе к фото
+  const currentPhoto = photos.length > 0 && index < photos.length ? photos[index] : null;
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -39,7 +49,7 @@ const PhotoViewer = ({ photos, currentIndex, open, onOpenChange, onDelete, onMov
         <div className="relative flex flex-col h-full">
           {/* Top bar */}
           <div className="flex justify-between items-center p-4 bg-black/50">
-            <h3 className="text-lg font-medium">{currentPhoto?.title}</h3>
+            <h3 className="text-lg font-medium">{currentPhoto?.title || ''}</h3>
             <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
               <X className="text-white" />
             </Button>
@@ -47,53 +57,59 @@ const PhotoViewer = ({ photos, currentIndex, open, onOpenChange, onDelete, onMov
           
           {/* Photo display */}
           <div className="flex-1 overflow-hidden flex items-center justify-center relative">
-            {photos.length > 0 && (
+            {currentPhoto && (
               <img 
-                src={currentPhoto?.url} 
-                alt={currentPhoto?.title}
+                src={currentPhoto.url} 
+                alt={currentPhoto.title}
                 className="max-h-full max-w-full object-contain"
               />
             )}
             
             {/* Navigation buttons */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="absolute left-4 rounded-full bg-black/30 hover:bg-black/50"
-              onClick={navigateToPrevious}
-            >
-              <ChevronLeft size={24} className="text-white" />
-            </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="absolute right-4 rounded-full bg-black/30 hover:bg-black/50"
-              onClick={navigateToNext}
-            >
-              <ChevronRight size={24} className="text-white" />
-            </Button>
+            {photos.length > 1 && (
+              <>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute left-4 rounded-full bg-black/30 hover:bg-black/50"
+                  onClick={navigateToPrevious}
+                >
+                  <ChevronLeft size={24} className="text-white" />
+                </Button>
+                
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="absolute right-4 rounded-full bg-black/30 hover:bg-black/50"
+                  onClick={navigateToNext}
+                >
+                  <ChevronRight size={24} className="text-white" />
+                </Button>
+              </>
+            )}
           </div>
           
           {/* Bottom bar */}
-          <div className="flex justify-end items-center p-4 bg-black/50">
-            <Button 
-              variant="ghost"
-              className="text-white hover:bg-white/20"
-              onClick={() => onMove(currentPhoto?.id)}
-            >
-              <FolderSymlink size={16} />
-              <span>Переместить</span>
-            </Button>
-            <Button 
-              variant="ghost"
-              className="text-destructive hover:bg-destructive/20"
-              onClick={() => onDelete(currentPhoto?.id)}
-            >
-              <Trash2 size={16} />
-              <span>Удалить</span>
-            </Button>
-          </div>
+          {currentPhoto && (
+            <div className="flex justify-end items-center p-4 bg-black/50">
+              <Button 
+                variant="ghost"
+                className="text-white hover:bg-white/20"
+                onClick={() => onMove(currentPhoto.id)}
+              >
+                <FolderSymlink size={16} />
+                <span>Переместить</span>
+              </Button>
+              <Button 
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/20"
+                onClick={() => onDelete(currentPhoto.id)}
+              >
+                <Trash2 size={16} />
+                <span>Удалить</span>
+              </Button>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

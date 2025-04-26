@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import AlbumCard from "@/components/PhotoGallery/AlbumCard";
@@ -13,13 +13,26 @@ interface Album {
 }
 
 const HomePage = () => {
-  const [albums, setAlbums] = useState<Album[]>([
-    { id: '1', title: 'Природа', photoCount: 12, coverUrl: 'https://images.unsplash.com/photo-1501854140801-50d01698950b?q=80&w=1600' },
-    { id: '2', title: 'Путешествия', photoCount: 34, coverUrl: 'https://images.unsplash.com/photo-1488085061387-422e29b40080?q=80&w=1600' },
-    { id: '3', title: 'Семья', photoCount: 56, coverUrl: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?q=80&w=1600' },
-  ]);
-  
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [albumToDelete, setAlbumToDelete] = useState<string | null>(null);
+  
+  // При первой загрузке инициализируем локальное хранилище если оно пустое
+  useEffect(() => {
+    const storedAlbums = localStorage.getItem('photoAlbums');
+    if (storedAlbums) {
+      setAlbums(JSON.parse(storedAlbums));
+    } else {
+      // Начальное состояние - пустой массив
+      localStorage.setItem('photoAlbums', JSON.stringify([]));
+    }
+  }, []);
+
+  // Сохраняем альбомы в localStorage при любом изменении
+  useEffect(() => {
+    if (albums.length > 0) {
+      localStorage.setItem('photoAlbums', JSON.stringify(albums));
+    }
+  }, [albums]);
 
   const createAlbum = (title: string) => {
     const newAlbum: Album = {
@@ -27,15 +40,17 @@ const HomePage = () => {
       title,
       photoCount: 0
     };
-    setAlbums(prev => [...prev, newAlbum]);
+    const updatedAlbums = [...albums, newAlbum];
+    setAlbums(updatedAlbums);
+    localStorage.setItem('photoAlbums', JSON.stringify(updatedAlbums));
   };
 
   const renameAlbum = (id: string, newTitle: string) => {
-    setAlbums(prev => 
-      prev.map(album => 
-        album.id === id ? { ...album, title: newTitle } : album
-      )
+    const updatedAlbums = albums.map(album => 
+      album.id === id ? { ...album, title: newTitle } : album
     );
+    setAlbums(updatedAlbums);
+    localStorage.setItem('photoAlbums', JSON.stringify(updatedAlbums));
   };
 
   const confirmDeleteAlbum = (id: string) => {
@@ -44,7 +59,9 @@ const HomePage = () => {
 
   const deleteAlbum = () => {
     if (albumToDelete) {
-      setAlbums(prev => prev.filter(album => album.id !== albumToDelete));
+      const updatedAlbums = albums.filter(album => album.id !== albumToDelete);
+      setAlbums(updatedAlbums);
+      localStorage.setItem('photoAlbums', JSON.stringify(updatedAlbums));
       setAlbumToDelete(null);
     }
   };
